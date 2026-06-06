@@ -26,7 +26,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY')  # Utilisez une vraie clé secrète en
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
-ALLOWED_HOSTS = ['*']  # Railway gère le routing
+ALLOWED_HOSTS = ['https://django-bot-0any.onrender.com/','localhost']  # Railway gère le routing
 
 
 # Application definition
