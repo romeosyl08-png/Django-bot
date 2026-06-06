@@ -25,7 +25,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get('SECRET_KEY')  # Utilisez une vraie clé secrète en production
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DEBUG', 'False') == 'True'
+DEBUG = 'True'
 ALLOWED_HOSTS = ['https://django-bot-0any.onrender.com/','localhost']  # Railway gère le routing
 
 
