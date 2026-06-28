@@ -10,7 +10,7 @@ load_dotenv()  # ← LA LIGNE MAGIQUE
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 API_URL = os.getenv("API_URL")
-AUTHORIZED_USERS = {int(id) for id in os.getenv("AUTHORIZED_USERS").split(",")}
+#AUTHORIZED_USERS = {int(id) for id in os.getenv("AUTHORIZED_USERS").split(",")}
 
 # --- Configuration Mammouth ---
 MAMMOUTH_API_KEY = os.getenv("MAMMOUTH_API_KEY")
@@ -85,14 +85,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Envoie la réponse
     await update.message.reply_text(reponse)
-
-# --- Enregistrement ---
-app = ApplicationBuilder().token(os.getenv("BOT_TOKEN")).build()
-app.add_handler(CommandHandler("start", start))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-app.run_polling()
-
 
 
 # /produits → appelle l'API Django
@@ -317,5 +309,7 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("ajouter", ajouter))
     app.add_handler(CommandHandler("modifier", modifier))
     app.add_handler(CommandHandler("supprimer", supprimer))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
     print("🤖 Bot démarré...")
     app.run_polling()
