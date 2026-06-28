@@ -1,16 +1,51 @@
 from functools import wraps
 import os
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 import requests
-
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
+
 
 load_dotenv()  # ← LA LIGNE MAGIQUE
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 API_URL = os.getenv("API_URL")
 AUTHORIZED_USERS = {int(id) for id in os.getenv("AUTHORIZED_USERS").split(",")}
+
+# --- Configuration Mammouth ---
+MAMMOUTH_API_KEY = os.getenv("MAMMOUTH_API_KEY")
+MAMMOUTH_URL = "https://api.mammouth.ai/v1/chat/completions"
+
+def ask_mammouth(question):
+    """Envoie une question à l'IA Mammouth et retourne la réponse."""
+    headers = {
+        "Authorization": f"Bearer {MAMMOUTH_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "model": "mistral-small-2603",  # PAS CHER : 0.15$/M tokens
+        "messages": [
+            {
+                "role": "system",
+                "content": "Tu es un assistant utile et concis. Réponds en français."
+            },
+            {
+                "role": "user",
+                "content": question
+            }
+        ],
+        "max_tokens": 500,        # limite le coût
+        "temperature": 0.7
+    }
+    
+    try:
+        response = requests.post(MAMMOUTH_URL, headers=headers, json=data, timeout=30)
+        response.raise_for_status()
+        return response.json()["choices"][0]["message"]["content"]
+    except requests.exceptions.Timeout:
+        return "⏱️ L'IA met trop de temps à répondre. Réessayez."
+    except Exception as e:
+        return f"❌ Erreur IA : {e}"
 
 # Liste des utilisateurs autorisés (IDs Telegram)
 def restricted(func):
@@ -31,11 +66,33 @@ def restricted(func):
     
     return wrapper
 
+
 # /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 Bonjour ! Tapez /produits pour voir la liste."
+        "🤖 Bonjour ! Posez-moi n'importe quelle question, je suis propulsé par l'IA."
     )
+
+# Tout message texte → IA
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_question = update.message.text
+    
+    # Montre que le bot "réfléchit"
+    await update.message.chat.send_action("typing")
+    
+    # Demande à l'IA
+    reponse = ask_mammouth(user_question)
+    
+    # Envoie la réponse
+    await update.message.reply_text(reponse)
+
+# --- Enregistrement ---
+app = ApplicationBuilder().token(os.getenv("BOT_TOKEN")).build()
+app.add_handler(CommandHandler("start", start))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+app.run_polling()
+
 
 
 # /produits → appelle l'API Django
