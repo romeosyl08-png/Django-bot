@@ -31,6 +31,8 @@ SECRET_KEY = os.environ.get('SECRET_KEY')  # Utilisez une vraie clé secrète en
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
   # Railway gère le routing
 ALLOWED_HOSTS = [host.strip() for host in os.environ.get('ALLOWED_HOSTS', '').split(',') if host.strip()]
+print("🔍 ALLOWED_HOSTS =", ALLOWED_HOSTS)
+print("🔍 DEBUG =", DEBUG)
 
 # Application definition
 
