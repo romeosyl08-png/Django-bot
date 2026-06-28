@@ -3,6 +3,7 @@ import os
 from telegram import Update
 import requests
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from database import save_message, get_history
 from dotenv import load_dotenv
 
 
@@ -16,36 +17,37 @@ API_URL = os.getenv("API_URL")
 MAMMOUTH_API_KEY = os.getenv("MAMMOUTH_API_KEY")
 MAMMOUTH_URL = "https://api.mammouth.ai/v1/chat/completions"
 
-def ask_mammouth(question):
-    """Envoie une question à l'IA Mammouth et retourne la réponse."""
+def ask_mammouth(messages):
+    """Accepte maintenant une LISTE de messages (pour la mémoire)."""
     headers = {
         "Authorization": f"Bearer {MAMMOUTH_API_KEY}",
         "Content-Type": "application/json"
     }
+    
+    # On ajoute le system prompt au début
+    full_messages = [
+        {"role": "system", "content": "Tu es un assistant utile et concis. Réponds en français."}
+    ] + messages
+    
     data = {
-        "model": "mistral-small-2603",  # PAS CHER : 0.15$/M tokens
-        "messages": [
-            {
-                "role": "system",
-                "content": "Tu es un assistant utile et concis. Réponds en français."
-            },
-            {
-                "role": "user",
-                "content": question
-            }
-        ],
-        "max_tokens": 500,        # limite le coût
+        "model": "mistral-small-2603",
+        "messages": full_messages,
+        "max_tokens": 500,
         "temperature": 0.7
     }
-    
     try:
         response = requests.post(MAMMOUTH_URL, headers=headers, json=data, timeout=30)
         response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"]
+        result = response.json()
+        reponse = result["choices"][0]["message"]["content"]
+        # 🆕 On récupère aussi les tokens pour le coût
+        tokens = result.get("usage", {}).get("total_tokens", 0)
+        return reponse, tokens
     except requests.exceptions.Timeout:
-        return "⏱️ L'IA met trop de temps à répondre. Réessayez."
+        return "⏱️ L'IA met trop de temps à répondre.", 0
     except Exception as e:
-        return f"❌ Erreur IA : {e}"
+        return f"❌ Erreur IA : {e}", 0
+
 
 # Liste des utilisateurs autorisés (IDs Telegram)
 def restricted(func):
@@ -75,16 +77,30 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Tout message texte → IA
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
     user_question = update.message.text
-    
-    # Montre que le bot "réfléchit"
+
     await update.message.chat.send_action("typing")
-    
-    # Demande à l'IA
-    reponse = ask_mammouth(user_question)
-    
-    # Envoie la réponse
+
+    # 🧠 On récupère l'historique
+    history = get_history(user.id, limit=5)
+    messages = []
+    for q, r in history:
+        messages.append({"role": "user", "content": q})
+        messages.append({"role": "assistant", "content": r})
+    messages.append({"role": "user", "content": user_question})
+
+    # L'IA répond AVEC contexte
+    reponse, tokens = ask_mammouth(messages)
+
+    # 💰 Calcul du coût (mistral-small : 0.15$/M tokens)
+    cout = tokens * 0.15 / 1_000_000
+
+    # 💾 Sauvegarde
+    save_message(user.id, user.username, user_question, reponse, tokens, cout)
+
     await update.message.reply_text(reponse)
+
 
 
 # /produits → appelle l'API Django
@@ -301,6 +317,9 @@ async def supprimer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Lancement
 if __name__ == "__main__":
+    from database import init_db
+    init_db()  # 🆕 crée les tables si besoin
+    
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -310,6 +329,6 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("modifier", modifier))
     app.add_handler(CommandHandler("supprimer", supprimer))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
+    
     print("🤖 Bot démarré...")
     app.run_polling()
